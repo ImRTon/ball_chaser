@@ -1,8 +1,7 @@
 /****************************
-*	Bluetooth remote car	    *
-*	NTUmaker				          *
-*	Teacher :				          *
-*		阿湯				              *
+*	Jetson Nano Remote car    *
+*	Auther :				          *
+*	阿湯                      *
 *	Platform :				        *
 *		Arduino nano		        *
 ****************************/
