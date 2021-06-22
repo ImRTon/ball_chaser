@@ -1,6 +1,5 @@
 """Utilities and tools for tracking runs with Weights & Biases."""
 import logging
-import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -19,7 +18,6 @@ try:
 except ImportError:
     wandb = None
 
-RANK = int(os.getenv('RANK', -1))
 WANDB_ARTIFACT_PREFIX = 'wandb-artifact://'
 
 
@@ -44,10 +42,10 @@ def get_run_info(run_path):
 
 
 def check_wandb_resume(opt):
-    process_wandb_config_ddp_mode(opt) if RANK not in [-1, 0] else None
+    process_wandb_config_ddp_mode(opt) if opt.global_rank not in [-1, 0] else None
     if isinstance(opt.resume, str):
         if opt.resume.startswith(WANDB_ARTIFACT_PREFIX):
-            if RANK not in [-1, 0]:  # For resuming DDP runs
+            if opt.global_rank not in [-1, 0]:  # For resuming DDP runs
                 entity, project, run_id, model_artifact_name = get_run_info(opt.resume)
                 api = wandb.Api()
                 artifact = api.artifact(entity + '/' + project + '/' + model_artifact_name + ':latest')
@@ -126,7 +124,8 @@ class WandbLogger():
                 if not opt.resume:
                     wandb_data_dict = self.check_and_upload_dataset(opt) if opt.upload_dataset else data_dict
                     # Info useful for resuming from artifacts
-                    self.wandb_run.config.update({'opt': vars(opt), 'data_dict': data_dict}, allow_val_change=True)
+                    self.wandb_run.config.opt = vars(opt)
+                    self.wandb_run.config.data_dict = wandb_data_dict
                 self.data_dict = self.setup_training(opt, data_dict)
             if self.job_type == 'Dataset Creation':
                 self.data_dict = self.check_and_upload_dataset(opt)

@@ -1,11 +1,4 @@
-"""Run inference with a YOLOv5 model on images, videos, directories, streams
-
-Usage:
-    $ python path/to/detect.py --source path/to/img.jpg --weights yolov5s.pt --img 640
-"""
-
 import argparse
-import sys
 import time
 from pathlib import Path
 
@@ -13,42 +6,40 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 
-FILE = Path(__file__).absolute()
-sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
-
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
-from utils.general import check_img_size, check_requirements, check_imshow, colorstr, non_max_suppression, \
-    apply_classifier, scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path, save_one_box
+from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
+    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path, save_one_box
 from utils.plots import colors, plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
 
 @torch.no_grad()
-def run(weights='yolov5s.pt',  # model.pt path(s)
-        source='data/images',  # file/dir/URL/glob, 0 for webcam
-        imgsz=640,  # inference size (pixels)
-        conf_thres=0.25,  # confidence threshold
-        iou_thres=0.45,  # NMS IOU threshold
-        max_det=1000,  # maximum detections per image
-        device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
-        view_img=False,  # show results
-        save_txt=False,  # save results to *.txt
-        save_conf=False,  # save confidences in --save-txt labels
-        save_crop=False,  # save cropped prediction boxes
-        nosave=False,  # do not save images/videos
-        classes=None,  # filter by class: --class 0, or --class 0 2 3
-        agnostic_nms=False,  # class-agnostic NMS
-        augment=False,  # augmented inference
-        update=False,  # update all models
-        project='runs/detect',  # save results to project/name
-        name='exp',  # save results to project/name
-        exist_ok=False,  # existing project/name ok, do not increment
-        line_thickness=3,  # bounding box thickness (pixels)
-        hide_labels=False,  # hide labels
-        hide_conf=False,  # hide confidences
-        half=False,  # use FP16 half-precision inference
-        ):
+def detect(weights='yolov5s.pt',  # model.pt path(s)
+           source='data/images',  # file/dir/URL/glob, 0 for webcam
+           imgsz=640,  # inference size (pixels)
+           conf_thres=0.25,  # confidence threshold
+           iou_thres=0.45,  # NMS IOU threshold
+           max_det=1000,  # maximum detections per image
+           device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
+           view_img=False,  # show results
+           save_txt=False,  # save results to *.txt
+           save_conf=False,  # save confidences in --save-txt labels
+           save_crop=False,  # save cropped prediction boxes
+           nosave=False,  # do not save images/videos
+           classes=None,  # filter by class: --class 0, or --class 0 2 3
+           agnostic_nms=False,  # class-agnostic NMS
+           augment=False,  # augmented inference
+           update=False,  # update all models
+           project='runs/detect',  # save results to project/name
+           name='exp',  # save results to project/name
+           exist_ok=False,  # existing project/name ok, do not increment
+           line_thickness=3,  # bounding box thickness (pixels)
+           hide_labels=False,  # hide labels
+           hide_conf=False,  # hide confidences
+           half=False,  # use FP16 half-precision inference
+           video="video",
+           ):
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -73,8 +64,8 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     # Second-stage classifier
     classify = False
     if classify:
-        modelc = load_classifier(name='resnet50', n=2)  # initialize
-        modelc.load_state_dict(torch.load('resnet50.pt', map_location=device)['model']).to(device).eval()
+        modelc = load_classifier(name='resnet101', n=2)  # initialize
+        modelc.load_state_dict(torch.load('weights/resnet101.pt', map_location=device)['model']).to(device).eval()
 
     # Set Dataloader
     vid_path, vid_writer = None, None
@@ -84,6 +75,14 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
         dataset = LoadStreams(source, img_size=imgsz, stride=stride)
     else:
         dataset = LoadImages(source, img_size=imgsz, stride=stride)
+
+    # Video
+    if video == 'video':
+        # 使用 XVID 編碼
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        # 建立 VideoWriter 物件，輸出影片至 output.avi
+        # FPS 值為 20.0，解析度為 640x360
+        out = cv2.VideoWriter('output.avi', fourcc, 30.0, (640, 360))
 
     # Run inference
     if device.type != 'cpu':
@@ -121,6 +120,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = im0.copy() if save_crop else im0  # for save_crop
+            isPerson = False
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -128,30 +128,50 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
                 # Print results
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
-                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                    if names[int(c)] == 'person':
+                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                        isPerson = True
+
 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        print("pos :", xywh)
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
+                        # if names[int(c)] == 'person':
+                        if names[int(c)] == 'apple' or names[int(c)] == 'sports ball':
+                            isPerson = True
+                            center = (int((xyxy[0] + xyxy[2])//2), int((xyxy[1] + xyxy[3])//2))
+                            print("pos :", center)
+                            cv2.circle(im0, center, 10, (255, 0, 0), 5)
+                            if (320-center[0]) > 100:
+                                arduino.write(b'4')
+                            elif (center[0] - 320) > 100:
+                                arduino.write(b'3')
+                            else:
+                                arduino.write(b'0')
+
+
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=line_thickness)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-
+            if isPerson is not True:
+                print("No person, no movement!")
+                arduino.write(b'0')
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
 
             # Stream results
             if view_img:
                 cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
+                if cv2.waitKey(1)& 0xFF == ord('q'):  # 1 millisecond
+                    out.release()
 
             # Save results (image with detections)
             if save_img:
@@ -182,7 +202,7 @@ def run(weights='yolov5s.pt',  # model.pt path(s)
     print(f'Done. ({time.time() - t0:.3f}s)')
 
 
-def parse_opt():
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='file/dir/URL/glob, 0 for webcam')
@@ -207,16 +227,9 @@ def parse_opt():
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
+    parser.add_argument("-video",'--video', type=str, default="live", help='store results as video')
     opt = parser.parse_args()
-    return opt
-
-
-def main(opt):
-    print(colorstr('detect: ') + ', '.join(f'{k}={v}' for k, v in vars(opt).items()))
+    print(opt)
     check_requirements(exclude=('tensorboard', 'thop'))
-    run(**vars(opt))
 
-
-if __name__ == "__main__":
-    opt = parse_opt()
-    main(opt)
+    detect(**vars(opt))

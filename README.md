@@ -62,13 +62,14 @@ See the [YOLOv5 Docs](https://docs.ultralytics.com) for full documentation on tr
 
 
 <details open>
-<summary>Install</summary>
+<summary>
+Install
+</summary>
 
 Python >= 3.6.0 required with all [requirements.txt](https://github.com/ultralytics/yolov5/blob/master/requirements.txt) dependencies installed:
 <!-- $ sudo apt update && apt install -y libgl1-mesa-glx libsm6 libxext6 libxrender-dev -->
 ```bash
 $ git clone https://github.com/ultralytics/yolov5
-$ cd yolov5
 $ pip install -r requirements.txt
 ```
 </details>
@@ -128,7 +129,7 @@ $ python train.py --data coco.yaml --cfg yolov5s.yaml --weights '' --batch-size 
 
 </details>  
 
-<details open>
+<details>
 <summary>Tutorials</summary>
 
 * [Train Custom Data](https://github.com/ultralytics/yolov5/wiki/Train-Custom-Data)&nbsp; 🚀 RECOMMENDED
